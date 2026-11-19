@@ -673,7 +673,7 @@ input[type="range"]::-moz-range-thumb{
 
     <section class="group">
       <div class="switch-row">
-        <div class="switch-copy"><strong>自动烟花</strong><small>终章后持续为你点亮夜空</small></div>
+        <div class="switch-copy"><strong>自动烟花</strong><small>终章后连续绽放，一直为你点亮</small></div>
         <label class="switch"><input type="checkbox" id="autoFw" checked aria-label="自动烟花"><i></i></label>
       </div>
       <div class="switch-row" style="margin-top:8px">
@@ -865,6 +865,7 @@ input[type="range"]::-moz-range-thumb{
   let revealTimers = [];
   let gestureTimer = null;
   let autoFwTimer = null;
+  let waveTimers = [];
   let toastTimer = null;
   let resizeTimer = null;
   let textShapeTimer = null;
@@ -1539,11 +1540,11 @@ input[type="range"]::-moz-range-thumb{
   let rockets = [];
   let sparks = [];
   let flashes = [];
-  const MAX_SPARKS = LOW_END ? 360 : 760;
+  const MAX_SPARKS = LOW_END ? 480 : 1000;
 
   function launchFirework(tx, ty, opts = {}) {
     if (!W || !H) return;
-    if (rockets.length >= (perf.fxScale < 0.8 ? 2 : 4)) rockets.shift();
+    if (rockets.length >= (perf.fxScale < 0.8 ? 6 : 10)) rockets.shift();
     const c = fireColors[randInt(0, fireColors.length - 1)] || fireColors[0];
     const outward = tx < W / 2 ? -1 : 1;
     const sx = clamp(tx + outward * rand(0, W * 0.06), 18, W - 18);
@@ -1685,19 +1686,61 @@ input[type="range"]::-moz-range-thumb{
     fctx.clearRect(0, 0, W, H);
   }
 
-  function sideFireworkX() {
-    return (Math.random() < 0.5 ? rand(0.12, 0.3) : rand(0.7, 0.88)) * W;
+  function sideFireworkX(leftSide) {
+    const left = leftSide == null ? Math.random() < 0.5 : leftSide;
+    return (left ? rand(0.12, 0.3) : rand(0.7, 0.88)) * W;
+  }
+
+  function autoWaveGap() {
+    if (REDUCED) return rand(2600, 3600);
+    if (LOW_END) return rand(850, 1200);
+    if (MOBILE) return rand(520, 850);
+    return rand(420, 680);
+  }
+
+  function autoWaveCount() {
+    if (REDUCED) return 1;
+    if (LOW_END) return 2;
+    if (MOBILE) return Math.random() < 0.35 ? 4 : 3;
+    return Math.random() < 0.35 ? 5 : 4;
+  }
+
+  function stopAutoFireworks() {
+    clearTimeout(autoFwTimer);
+    autoFwTimer = null;
+    waveTimers.forEach(clearTimeout);
+    waveTimers = [];
+  }
+
+  function runAutoFireworkWave() {
+    if (!S.autoFw) return;
+    if (document.hidden || (phase !== 'free' && phase !== 'reveal')) return;
+
+    waveTimers.forEach(clearTimeout);
+    waveTimers = [];
+    const total = autoWaveCount();
+    const leftFirst = Math.random() < 0.5;
+    for (let i = 0; i < total; i++) {
+      const x = sideFireworkX(i % 2 === 0 ? leftFirst : !leftFirst);
+      const y = rand(H * 0.1, H * 0.47);
+      const delay = i * rand(55, 135);
+      if (delay === 0) {
+        launchFirework(x, y);
+      } else {
+        waveTimers.push(setTimeout(() => {
+          if (!document.hidden && S.autoFw && (phase === 'free' || phase === 'reveal')) {
+            launchFirework(x, y);
+          }
+        }, delay));
+      }
+    }
+    autoFwTimer = setTimeout(runAutoFireworkWave, autoWaveGap());
   }
 
   function scheduleAutoFireworks(delay) {
-    clearTimeout(autoFwTimer);
+    stopAutoFireworks();
     if (!S.autoFw) return;
-    autoFwTimer = setTimeout(() => {
-      if (!document.hidden && (phase === 'free' || phase === 'reveal') && S.autoFw) {
-        launchFirework(sideFireworkX(), rand(H * 0.12, H * 0.46));
-        scheduleAutoFireworks(REDUCED ? rand(3600, 5600) : rand(1500, 2800));
-      }
-    }, delay == null ? 900 : delay);
+    autoFwTimer = setTimeout(runAutoFireworkWave, delay == null ? 900 : delay);
   }
 
   /* ---------------- 音频（原生 Web Audio，无外部资源） ---------------- */
@@ -2034,7 +2077,7 @@ input[type="range"]::-moz-range-thumb{
     if (phase !== 'intro') return;
     phase = 'countdown';
     clearTimeout(countdownTimer);
-    clearTimeout(autoFwTimer);
+    stopAutoFireworks();
     revealTimers.forEach(clearTimeout);
     revealTimers = [];
     countdownDigit = 3;
@@ -2074,12 +2117,14 @@ input[type="range"]::-moz-range-thumb{
       const id = setTimeout(() => launchFirework(x, y), delay);
       revealTimers.push(id);
     };
-    burst(W * 0.24, H * 0.24, 120);
-    burst(W * 0.76, H * 0.2, 430);
-    burst(W * 0.16, H * 0.14, 760);
-    burst(W * 0.84, H * 0.34, 1050);
+    burst(W * 0.2, H * 0.24, 80);
+    burst(W * 0.8, H * 0.2, 260);
+    burst(W * 0.25, H * 0.38, 520);
+    burst(W * 0.75, H * 0.34, 700);
+    burst(W * 0.12, H * 0.16, 940);
+    burst(W * 0.88, H * 0.14, 1120);
 
-    scheduleAutoFireworks(1900);
+    scheduleAutoFireworks(1300);
     clearTimeout(gestureTimer);
     gestureTimer = setTimeout(() => {
       el.gestureHint.classList.add('is-on');
@@ -2101,7 +2146,7 @@ input[type="range"]::-moz-range-thumb{
       return;
     }
     clearTimeout(countdownTimer);
-    clearTimeout(autoFwTimer);
+    stopAutoFireworks();
     clearTimeout(gestureTimer);
     revealTimers.forEach(clearTimeout);
     revealTimers = [];
@@ -2266,8 +2311,8 @@ input[type="range"]::-moz-range-thumb{
   el.autoFw.addEventListener('change', (e) => {
     S.autoFw = e.target.checked;
     saveSoon();
-    if (S.autoFw && (phase === 'free' || phase === 'reveal')) scheduleAutoFireworks(700);
-    else clearTimeout(autoFwTimer);
+    if (S.autoFw && (phase === 'free' || phase === 'reveal')) scheduleAutoFireworks(450);
+    else stopAutoFireworks();
   });
   el.soundToggle.addEventListener('change', (e) => setSound(e.target.checked));
   el.resetAll.addEventListener('click', () => {
@@ -2277,6 +2322,7 @@ input[type="range"]::-moz-range-thumb{
     syncAll();
     setSound(S.sound);
     sizeCanvas();
+    if (S.autoFw && (phase === 'free' || phase === 'reveal')) scheduleAutoFireworks(600);
     showToast('已恢复默认设置', 1600);
     save();
   });
@@ -2337,12 +2383,13 @@ input[type="range"]::-moz-range-thumb{
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       stopMusic();
+      stopAutoFireworks();
       if (actx) actx.suspend().catch(() => {});
     } else {
       if (actx && S.sound) actx.resume().catch(() => {});
       if (!document.hidden && S.sound && phase !== 'intro') startMusic();
       if (!document.hidden && (phase === 'free' || phase === 'reveal') && S.autoFw) {
-        scheduleAutoFireworks(900);
+        scheduleAutoFireworks(450);
       }
     }
   });
